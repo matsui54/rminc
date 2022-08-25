@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::Write;
 
+/// # reference
+/// https://www.sigbus.info/compilerbook
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let argc = args.len();
