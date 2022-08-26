@@ -10,9 +10,11 @@ mod rminc_parse;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let argc = args.len();
+    let file_code = if argc > 1 { &args[1] } else { "ex.c" };
     let file_asm = if argc > 2 { &args[2] } else { "ex.s" };
 
-    let ast = rminc_ast::Program { defs: Vec::new() };
+    let code = std::fs::read_to_string(file_code).expect(&format!("Failed to open {}", file_code));
+    let ast = rminc_parse::str_to_ast(code);
 
     let asm = rminc_cogen::ast_to_asm_program(ast);
 
