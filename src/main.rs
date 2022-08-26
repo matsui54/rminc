@@ -3,6 +3,7 @@ use std::io::Write;
 
 mod rminc_ast;
 mod rminc_cogen;
+mod rminc_parse;
 
 /// # reference
 /// https://www.sigbus.info/compilerbook
