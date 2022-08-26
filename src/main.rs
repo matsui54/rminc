@@ -14,7 +14,7 @@ fn main() {
     let file_asm = if argc > 2 { &args[2] } else { "ex.s" };
 
     let code = std::fs::read_to_string(file_code).expect(&format!("Failed to open {}", file_code));
-    let ast = rminc_parse::str_to_ast(code);
+    let ast = rminc_parse::str_to_ast(&code);
 
     let asm = rminc_cogen::ast_to_asm_program(ast);
 
