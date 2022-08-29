@@ -1,7 +1,7 @@
 all : test_print
 
 test :
-	cargo test
+	cargo build
 	./test.sh
 
 test_print:

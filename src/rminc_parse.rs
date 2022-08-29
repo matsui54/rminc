@@ -113,20 +113,34 @@ impl Parser<'_> {
         }
     }
 
-    /// mul     = primary ("*" primary | "/" primary)*
+    /// mul     = unary ("*" unary | "/" unary)*
     fn mul(&mut self) -> rminc_ast::Expr {
-        let mut node = self.primary();
+        let mut node = self.unary();
         loop {
             if self.consume("*") {
-                node = rminc_ast::Expr::Op(String::from("*"), Vec::from([node, self.primary()]));
+                node = rminc_ast::Expr::Op(String::from("*"), Vec::from([node, self.unary()]));
                 continue;
             }
             if self.consume("/") {
-                node = rminc_ast::Expr::Op(String::from("/"), Vec::from([node, self.primary()]));
+                node = rminc_ast::Expr::Op(String::from("/"), Vec::from([node, self.unary()]));
                 continue;
             }
             return node;
         }
+    }
+
+    /// unary   = ("+" | "-")? primary
+    fn unary(&mut self) -> rminc_ast::Expr {
+        if self.consume("+") {
+            return self.primary();
+        }
+        if self.consume("-") {
+            return rminc_ast::Expr::Op(
+                String::from("-"),
+                Vec::from([rminc_ast::Expr::IntLiteral(0), self.primary()]),
+            );
+        }
+        self.primary()
     }
 
     /// primary = num | "(" expr ")"
@@ -168,6 +182,7 @@ mod tests {
         println!("{:?}", tokenize("  1 +       1+213213- 22 "));
         println!("{:?}", str_to_ast("  1 +       1+213213- 22 "));
         println!("{:?}", str_to_ast("1*2+(3+4)"));
+        println!("{:?}", str_to_ast("-3*+5+30"));
         assert_eq!(Some((120, "hogehgoe")), get_number("120hogehgoe"));
         assert_eq!(Some((120, "")), get_number("120"));
         assert_eq!(Some((0, "")), get_number("0"));
