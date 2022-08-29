@@ -1,4 +1,4 @@
-use crate::rminc_ast;
+use crate::ast;
 use std::collections::HashMap;
 
 /// 「環境」を表す型
@@ -29,7 +29,7 @@ struct Context<'a> {
 ///     使えるスタックの領域は引数 v に入っていて、%rbpからのオフセットでアクセスする。
 /// 3. aを計算する。
 /// 4. aが%raxに、bがスタックに入っているので、演算子に応じた計算を行い、結果を%raxに代入する。
-fn op_arithmetic_to_asm(inst: &str, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -> String {
+fn op_arithmetic_to_asm(inst: &str, exprs: &Vec<ast::Expr>, env: &Env, v: u32) -> String {
     match inst {
         "+" => {
             let tmp_mem = v;
@@ -111,7 +111,7 @@ fn op_arithmetic_to_asm(inst: &str, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: 
 
 /// 比較系の演算子を計算する
 /// instはsetlやseteなどのconditional set命令
-fn op_comp_to_asm(inst: &str, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -> String {
+fn op_comp_to_asm(inst: &str, exprs: &Vec<ast::Expr>, env: &Env, v: u32) -> String {
     if exprs.len() != 2 {
         panic!("invalid num of operator {inst}")
     }
@@ -127,7 +127,7 @@ fn op_comp_to_asm(inst: &str, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -
 
 /// 演算系の処理
 /// 結果は%raxに入れる
-fn op_to_asm(op: String, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -> String {
+fn op_to_asm(op: String, exprs: &Vec<ast::Expr>, env: &Env, v: u32) -> String {
     match op.as_str() {
         // 変数への代入
         // envから値を探してくる
@@ -137,7 +137,7 @@ fn op_to_asm(op: String, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -> Str
             }
             let (lhs, rhs) = (&exprs[0], &exprs[1]);
             let operand = match lhs {
-                rminc_ast::Expr::Id(expr) => match env.get(expr) {
+                ast::Expr::Id(expr) => match env.get(expr) {
                     Some(expr) => *expr,
                     None => panic!("undefined variable {expr}"),
                 },
@@ -161,20 +161,20 @@ fn op_to_asm(op: String, exprs: &Vec<rminc_ast::Expr>, env: &Env, v: u32) -> Str
 
 /// Expr構造体からアセンブリを出力する関数。
 /// exprを評価し、その結果を%raxレジスタに代入するようなアセンブリを生成する。
-fn expr_to_asm(expr: &rminc_ast::Expr, env: &Env, v: u32) -> String {
+fn expr_to_asm(expr: &ast::Expr, env: &Env, v: u32) -> String {
     match expr {
-        rminc_ast::Expr::IntLiteral(num) => format!("  movq ${num}, %rax\n"),
-        rminc_ast::Expr::Id(id) => {
+        ast::Expr::IntLiteral(num) => format!("  movq ${num}, %rax\n"),
+        ast::Expr::Id(id) => {
             let addr = match env.get(id) {
                 Some(expr) => *expr,
                 None => panic!("undefined variable {id}"),
             };
             format!("  movq -{addr}(%rbp), %rax\n")
         }
-        rminc_ast::Expr::Op(op, exprs) => op_to_asm(op.to_string(), exprs, env, v),
-        rminc_ast::Expr::Call(expr, exprs) => {
+        ast::Expr::Op(op, exprs) => op_to_asm(op.to_string(), exprs, env, v),
+        ast::Expr::Call(expr, exprs) => {
             let fn_name = match &*(*expr) {
-                rminc_ast::Expr::Id(label) => label,
+                ast::Expr::Id(label) => label,
                 _ => {
                     panic!("{:?} is not id", expr)
                 }
@@ -203,28 +203,28 @@ fn expr_to_asm(expr: &rminc_ast::Expr, env: &Env, v: u32) -> String {
             asm += format!("  addq ${rsp_offset}, %rsp\n").as_str();
             asm
         }
-        rminc_ast::Expr::Paren(expr) => expr_to_asm(&(*expr), env, v),
+        ast::Expr::Paren(expr) => expr_to_asm(&(*expr), env, v),
     }
 }
 
 /// statementをアセンブリに変換する
-fn stmt_to_asm(stmt: rminc_ast::Stmt, context: &mut Context) -> String {
+fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
     match stmt {
-        rminc_ast::Stmt::Empty => String::from(""),
-        rminc_ast::Stmt::Continue => String::from(""),
-        rminc_ast::Stmt::Break => String::from(""),
+        ast::Stmt::Empty => String::from(""),
+        ast::Stmt::Continue => String::from(""),
+        ast::Stmt::Break => String::from(""),
         // expr_to_asmは%raxに結果を書くのでそのままretqする。
         // %rbpも戻す
-        rminc_ast::Stmt::Return(expr) => format!(
+        ast::Stmt::Return(expr) => format!(
             "{}  popq %rbp\n  retq\n",
             expr_to_asm(&expr, &context.env, context.v)
         ),
-        rminc_ast::Stmt::Expr(expr) => expr_to_asm(&expr, &context.env, context.v),
+        ast::Stmt::Expr(expr) => expr_to_asm(&expr, &context.env, context.v),
         // 波括弧で囲まれた部分
         // この中で宣言された変数はこの中でしか使えないが、
         // スコープ外で定義された変数にはアクセスできる。
         // envをコピーすることによって、スコープの概念を実現する。
-        rminc_ast::Stmt::Compound(decls, stmts) => {
+        ast::Stmt::Compound(decls, stmts) => {
             let mut env = context.env.clone();
             for decl in decls {
                 env.insert(decl.name, context.v);
@@ -247,7 +247,7 @@ fn stmt_to_asm(stmt: rminc_ast::Stmt, context: &mut Context) -> String {
         }
         // if文
         // 条件を評価し、結果が0ならelse節か最後までジャンプ
-        rminc_ast::Stmt::If(expr, stmt, stmt_else) => {
+        ast::Stmt::If(expr, stmt, stmt_else) => {
             let cond_asm = expr_to_asm(&expr, context.env, context.v);
             let body = stmt_to_asm(*stmt, context);
             context.labels += 1;
@@ -276,7 +276,7 @@ fn stmt_to_asm(stmt: rminc_ast::Stmt, context: &mut Context) -> String {
         // 波括弧の中の処理→条件の評価
         // という順序で書き、まずは条件の評価にジャンプする
         // 続ける条件が満たされていれば、上に戻って処理を継続する。
-        rminc_ast::Stmt::While(expr, stmt) => {
+        ast::Stmt::While(expr, stmt) => {
             let cond_asm = expr_to_asm(&expr, context.env, context.v);
             let body_asm = stmt_to_asm(*stmt, context);
             context.labels += 1;
@@ -295,9 +295,9 @@ fn stmt_to_asm(stmt: rminc_ast::Stmt, context: &mut Context) -> String {
 }
 
 /// 一つの関数をアセンブリに変換する
-fn def_to_asm(fun: rminc_ast::Def) -> String {
+fn def_to_asm(fun: ast::Def) -> String {
     match fun {
-        rminc_ast::Def::Fun(str, decls, _, stmt) => {
+        ast::Def::Fun(str, decls, _, stmt) => {
             // 決まり文句
             // rbpはcollee saveなので、スタックに積む
             let prologue = format!(
@@ -352,7 +352,7 @@ fn def_to_asm(fun: rminc_ast::Def) -> String {
 
 /// astからアセンブリを出力する関数
 /// 関数ごとにアセンブリを生成して結合する。
-pub fn ast_to_asm_program(_program: rminc_ast::Program) -> String {
+pub fn ast_to_asm_program(_program: ast::Program) -> String {
     _program
         .defs
         .into_iter()
