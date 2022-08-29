@@ -9,46 +9,86 @@ enum TokenKind<'a> {
 #[derive(Debug)]
 struct Token<'a> {
     kind: TokenKind<'a>,
-    // str: &'a str,
+    at: usize,
 }
 
-fn get_number(code: &str) -> Option<(i64, &str)> {
-    if code.len() == 0 {
-        return None;
+struct Tokenizer<'a> {
+    code: &'a str,
+    cur: usize,
+}
+
+impl Tokenizer<'_> {
+    fn new(code: &str) -> Tokenizer {
+        Tokenizer { code, cur: 0 }
     }
-    match code.find(|c: char| !c.is_digit(10)) {
-        Some(pos) => {
-            if pos == 0 {
-                None
-            } else {
-                Some((code[0..pos].parse::<i64>().unwrap(), &code[pos..]))
+
+    fn skip_space(&mut self) {
+        match self.code[self.cur..].find(|c: char| !c.is_whitespace()) {
+            Some(pos) => {
+                self.cur += pos;
+            }
+            None => {
+                self.cur = self.code.len() - 1;
             }
         }
-        None => Some((code.parse::<i64>().unwrap(), "")),
     }
-}
 
-fn tokenize(code: &str) -> Vec<Token> {
-    let mut p = code;
-    let mut tokens: Vec<Token> = Vec::new();
-    while p.len() != 0 {
-        p = p.trim_start();
-
-        if let Some((val, rem)) = get_number(p) {
-            tokens.push(Token {
-                kind: TokenKind::Num(val),
-            });
-            p = rem;
-        }
-        if p.starts_with(|c: char| c.is_ascii_punctuation()) {
-            tokens.push(Token {
-                kind: TokenKind::Reserved(&p[0..1]),
-            });
-            p = &p[1..];
-            continue;
+    fn get_number(&mut self) -> Option<i64> {
+        let rem = &self.code[self.cur..];
+        match rem.find(|c: char| !c.is_digit(10)) {
+            Some(pos) => {
+                if pos == 0 {
+                    None
+                } else {
+                    self.cur += pos;
+                    Some(rem[..pos].parse::<i64>().unwrap())
+                }
+            }
+            None => {
+                self.cur = self.code.len() - 1;
+                Some(rem.parse::<i64>().unwrap())
+            }
         }
     }
-    tokens
+
+    fn get_punct_size(&self) -> usize {
+        let rem = &self.code[self.cur..];
+        if rem.starts_with("==")
+            || rem.starts_with("!=")
+            || rem.starts_with("<=")
+            || rem.starts_with(">=")
+        {
+            2
+        } else if rem.starts_with(|c: char| c.is_ascii_punctuation()) {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn tokenize(&mut self) -> Vec<Token> {
+        let mut tokens: Vec<Token> = Vec::new();
+        while self.cur < self.code.len() - 1 {
+            self.skip_space();
+
+            if let Some(num) = self.get_number() {
+                tokens.push(Token {
+                    kind: TokenKind::Num(num),
+                    at: self.cur,
+                });
+                continue;
+            }
+            let ps = self.get_punct_size();
+            if ps != 0 {
+                tokens.push(Token {
+                    kind: TokenKind::Reserved(&self.code[self.cur..(self.cur + ps)]),
+                    at: self.cur,
+                });
+                self.cur += ps;
+            }
+        }
+        tokens
+    }
 }
 
 #[derive(Debug)]
@@ -167,7 +207,8 @@ impl Parser<'_> {
 }
 
 pub fn str_to_ast(code: &str) -> rminc_ast::Program {
-    let tokens = tokenize(code);
+    let mut tokenizer = Tokenizer::new(code);
+    let tokens = tokenizer.tokenize();
     let mut parser = Parser::new(tokens);
     parser.parse()
 }
