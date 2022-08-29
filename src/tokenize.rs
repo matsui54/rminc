@@ -2,6 +2,7 @@
 pub enum TokenKind<'a> {
     Reserved(&'a str),
     Num(i64),
+    Ident(&'a str),
 }
 
 #[derive(Debug)]
@@ -64,6 +65,18 @@ impl Tokenizer<'_> {
         }
     }
 
+    fn get_ident_size(&self) -> usize {
+        let rem = &self.code[self.cur..];
+        let is_ident = |c: char| c.is_alphabetic() || c == '_';
+        if rem.starts_with(is_ident) {
+            match rem.find(|c: char| !(is_ident(c) || c.is_digit(10))) {
+                Some(pos) => return pos,
+                None => return rem.len(),
+            }
+        }
+        0
+    }
+
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
         while self.cur < self.code.len() - 1 {
@@ -76,13 +89,25 @@ impl Tokenizer<'_> {
                 });
                 continue;
             }
-            let ps = self.get_punct_size();
-            if ps != 0 {
-                tokens.push(Token {
-                    kind: TokenKind::Reserved(&self.code[self.cur..(self.cur + ps)]),
-                    at: self.cur,
-                });
-                self.cur += ps;
+            {
+                let ps = self.get_punct_size();
+                if ps != 0 {
+                    tokens.push(Token {
+                        kind: TokenKind::Reserved(&self.code[self.cur..(self.cur + ps)]),
+                        at: self.cur,
+                    });
+                    self.cur += ps;
+                }
+            }
+            {
+                let is = self.get_ident_size();
+                if is != 0 {
+                    tokens.push(Token {
+                        kind: TokenKind::Ident(&self.code[self.cur..(self.cur + is)]),
+                        at: self.cur,
+                    });
+                    self.cur += is;
+                }
             }
         }
         tokens

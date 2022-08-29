@@ -47,9 +47,41 @@ impl Parser<'_> {
         panic!("number is expected");
     }
 
-    /// expr       = equality
+    /// program    = stmt*
+    fn program(&mut self) -> ast::Program {
+        let mut stmts = Vec::new();
+        while self.cur < self.tok_len {
+            stmts.push(self.stmt());
+        }
+        ast::Program {
+            defs: Vec::from([ast::Def::Fun(
+                String::from("main"),
+                Vec::new(),
+                ast::TypeExpr::Primitive(String::from("long")),
+                ast::Stmt::Compound(Vec::new(), stmts),
+            )]),
+        }
+    }
+
+    /// stmt       = expr ";"
+    fn stmt(&mut self) -> ast::Stmt {
+        let node = ast::Stmt::Expr(self.expr());
+        self.skip(";");
+        node
+    }
+
+    /// expr       = assign
     fn expr(&mut self) -> ast::Expr {
-        self.equality()
+        self.assign()
+    }
+
+    /// assign     = equality ("=" assign)?
+    fn assign(&mut self) -> ast::Expr {
+        let mut node = self.equality();
+        if self.consume("=") {
+            node = ast::Expr::Op(String::from("="), Vec::from([node, self.assign()]));
+        }
+        node
     }
 
     /// equality   = relational ("==" relational | "!=" relational)*
@@ -138,26 +170,25 @@ impl Parser<'_> {
         self.primary()
     }
 
-    /// primary = num | "(" expr ")"
+    /// primary    = num | ident | "(" expr ")"
     fn primary(&mut self) -> ast::Expr {
         if self.consume("(") {
             let node = self.expr();
             self.skip(")");
             return node;
         }
+
+        if let TokenKind::Ident(ident) = self.tokens[self.cur].kind {
+            let node = ast::Expr::Id(String::from(ident));
+            self.cur += 1;
+            return node;
+        }
+
         self.expect_number()
     }
 
     pub fn parse(&mut self) -> ast::Program {
-        let def = ast::Def::Fun(
-            String::from("main"),
-            Vec::new(),
-            ast::TypeExpr::Primitive(String::from("long")),
-            ast::Stmt::Return(self.expr()),
-        );
-        ast::Program {
-            defs: Vec::from([def]),
-        }
+        self.program()
     }
 }
 
