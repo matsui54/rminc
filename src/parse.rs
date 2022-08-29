@@ -63,11 +63,17 @@ impl Parser<'_> {
         }
     }
 
-    /// stmt       = expr ";"
+    /// stmt    = expr ";" | "return" expr ";"
     fn stmt(&mut self) -> ast::Stmt {
-        let node = ast::Stmt::Expr(self.expr());
+        let node: ast::Stmt;
+        if let TokenKind::Return = self.tokens[self.cur].kind {
+            self.cur += 1;
+            node = ast::Stmt::Return(self.expr());
+        } else {
+            node = ast::Stmt::Expr(self.expr());
+        }
         self.skip(";");
-        node
+        return node;
     }
 
     /// expr       = assign

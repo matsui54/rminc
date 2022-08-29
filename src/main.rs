@@ -21,6 +21,7 @@ fn main() {
 
     let mut tokenizer = Tokenizer::new(&code);
     let tokens = tokenizer.tokenize();
+    println!("{:?}", tokens);
 
     let ast = Parser::new(tokens).parse();
 

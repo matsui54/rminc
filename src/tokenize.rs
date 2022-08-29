@@ -3,6 +3,7 @@ pub enum TokenKind<'a> {
     Reserved(&'a str),
     Num(i64),
     Ident(&'a str),
+    Return,
 }
 
 #[derive(Debug)]
@@ -14,6 +15,10 @@ pub struct Token<'a> {
 pub struct Tokenizer<'a> {
     code: &'a str,
     cur: usize,
+}
+
+fn is_alnum(c: char) -> bool {
+    c.is_alphabetic() || c == '_'
 }
 
 impl Tokenizer<'_> {
@@ -98,6 +103,16 @@ impl Tokenizer<'_> {
                     });
                     self.cur += ps;
                 }
+            }
+            // must come before ident
+            if self.code[self.cur..].starts_with("return")
+                && self.code[(self.cur + 6)..].starts_with(|ch| !is_alnum(ch))
+            {
+                tokens.push(Token {
+                    kind: TokenKind::Return,
+                    at: self.cur,
+                });
+                self.cur += 6;
             }
             {
                 let is = self.get_ident_size();
