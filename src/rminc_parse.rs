@@ -137,8 +137,55 @@ impl Parser<'_> {
         panic!("number is expected");
     }
 
-    /// expr    = mul ("+" mul | "-" mul)*
+    /// expr       = equality
     fn expr(&mut self) -> rminc_ast::Expr {
+        self.equality()
+    }
+
+    /// equality   = relational ("==" relational | "!=" relational)*
+    fn equality(&mut self) -> rminc_ast::Expr {
+        let mut node = self.relational();
+        loop {
+            if self.consume("==") {
+                node =
+                    rminc_ast::Expr::Op(String::from("=="), Vec::from([node, self.relational()]));
+                continue;
+            }
+            if self.consume("!=") {
+                node =
+                    rminc_ast::Expr::Op(String::from("!="), Vec::from([node, self.relational()]));
+                continue;
+            }
+            return node;
+        }
+    }
+
+    /// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+    fn relational(&mut self) -> rminc_ast::Expr {
+        let mut node = self.add();
+        loop {
+            if self.consume("<") {
+                node = rminc_ast::Expr::Op(String::from("<"), Vec::from([node, self.add()]));
+                continue;
+            }
+            if self.consume("<=") {
+                node = rminc_ast::Expr::Op(String::from("<="), Vec::from([node, self.add()]));
+                continue;
+            }
+            if self.consume(">") {
+                node = rminc_ast::Expr::Op(String::from(">"), Vec::from([node, self.add()]));
+                continue;
+            }
+            if self.consume(">=") {
+                node = rminc_ast::Expr::Op(String::from(">="), Vec::from([node, self.add()]));
+                continue;
+            }
+            return node;
+        }
+    }
+
+    /// add        = mul ("+" mul | "-" mul)*
+    fn add(&mut self) -> rminc_ast::Expr {
         let mut node = self.mul();
         loop {
             if self.consume("+") {
@@ -169,15 +216,15 @@ impl Parser<'_> {
         }
     }
 
-    /// unary   = ("+" | "-")? primary
+    /// unary = ("+" | "-") unary | primary
     fn unary(&mut self) -> rminc_ast::Expr {
         if self.consume("+") {
-            return self.primary();
+            return self.unary();
         }
         if self.consume("-") {
             return rminc_ast::Expr::Op(
                 String::from("-"),
-                Vec::from([rminc_ast::Expr::IntLiteral(0), self.primary()]),
+                Vec::from([rminc_ast::Expr::IntLiteral(0), self.unary()]),
             );
         }
         self.primary()
