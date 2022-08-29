@@ -144,7 +144,7 @@ impl Parser<'_> {
             String::from("main"),
             Vec::new(),
             rminc_ast::TypeExpr::Primitive(String::from("long")),
-            rminc_ast::Stmt::Expr(self.expr()),
+            rminc_ast::Stmt::Return(self.expr()),
         );
         rminc_ast::Program {
             defs: Vec::from([def]),

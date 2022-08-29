@@ -1,12 +1,16 @@
-all : test_no_cap
+all : test_print
 
 test :
 	cargo test
+	./test.sh
 
-test_no_cap:
+test_print:
 	cargo test -- --nocapture
 
 run :
 	cargo run
 
-.PHONY: test run
+clean:
+	rm -f tmp*
+
+.PHONY: test test_print run clean
