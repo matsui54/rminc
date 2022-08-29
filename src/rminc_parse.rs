@@ -40,7 +40,7 @@ fn tokenize(code: &str) -> Vec<Token> {
             });
             p = rem;
         }
-        if p.starts_with(&['+', '-']) {
+        if p.starts_with(|c: char| c.is_ascii_punctuation()) {
             tokens.push(Token {
                 kind: TokenKind::Reserved(&p[0..1]),
             });
@@ -59,7 +59,7 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+    fn new(tokens: Vec<Token>) -> Parser {
         Parser {
             tok_len: tokens.len(),
             tokens,
@@ -68,6 +68,9 @@ impl Parser<'_> {
     }
 
     fn consume(&mut self, op: &str) -> bool {
+        if self.cur == self.tok_len {
+            return false;
+        }
         if let TokenKind::Reserved(str) = self.tokens[self.cur].kind {
             if str == op {
                 self.cur += 1;
@@ -77,40 +80,72 @@ impl Parser<'_> {
         false
     }
 
-    fn expect(&mut self, op: &str) {
-        if let TokenKind::Reserved(str) = self.tokens[self.cur].kind {
-            if str == op {
-                self.cur += 1;
-                return;
-            }
+    fn skip(&mut self, op: &str) {
+        if !self.consume(op) {
+            panic!("{} is expected", op)
         }
-        panic!("{} is expected", op)
     }
 
-    fn expect_number(&mut self) -> i64 {
+    fn expect_number(&mut self) -> rminc_ast::Expr {
+        if self.cur == self.tok_len {
+            panic!("number is expected");
+        }
         if let TokenKind::Num(num) = self.tokens[self.cur].kind {
             self.cur += 1;
-            return num;
+            return rminc_ast::Expr::IntLiteral(num);
         }
         panic!("number is expected");
     }
 
-    pub fn parse(&mut self) -> rminc_ast::Program {
+    /// expr    = mul ("+" mul | "-" mul)*
+    fn expr(&mut self) -> rminc_ast::Expr {
+        let mut node = self.mul();
+        loop {
+            if self.consume("+") {
+                node = rminc_ast::Expr::Op(String::from("+"), Vec::from([node, self.mul()]));
+                continue;
+            }
+            if self.consume("-") {
+                node = rminc_ast::Expr::Op(String::from("-"), Vec::from([node, self.mul()]));
+                continue;
+            }
+            return node;
+        }
+    }
+
+    /// mul     = primary ("*" primary | "/" primary)*
+    fn mul(&mut self) -> rminc_ast::Expr {
+        let mut node = self.primary();
+        loop {
+            if self.consume("*") {
+                node = rminc_ast::Expr::Op(String::from("*"), Vec::from([node, self.primary()]));
+                continue;
+            }
+            if self.consume("/") {
+                node = rminc_ast::Expr::Op(String::from("/"), Vec::from([node, self.primary()]));
+                continue;
+            }
+            return node;
+        }
+    }
+
+    /// primary = num | "(" expr ")"
+    fn primary(&mut self) -> rminc_ast::Expr {
+        if self.consume("(") {
+            let node = self.expr();
+            self.skip(")");
+            return node;
+        }
+        self.expect_number()
+    }
+
+    fn parse(&mut self) -> rminc_ast::Program {
         let def = rminc_ast::Def::Fun(
             String::from("main"),
             Vec::new(),
             rminc_ast::TypeExpr::Primitive(String::from("long")),
-            rminc_ast::Stmt::Empty,
+            rminc_ast::Stmt::Expr(self.expr()),
         );
-        println!("{}", self.expect_number());
-        while self.cur < self.tok_len {
-            if self.consume("+") {
-                println!("+\n{}", self.expect_number());
-                continue;
-            }
-            self.expect("-");
-            println!("-\n{}", self.expect_number());
-        }
         rminc_ast::Program {
             defs: Vec::from([def]),
         }
@@ -132,6 +167,7 @@ mod tests {
         println!("{:?}", tokenize("1+1"));
         println!("{:?}", tokenize("  1 +       1+213213- 22 "));
         println!("{:?}", str_to_ast("  1 +       1+213213- 22 "));
+        println!("{:?}", str_to_ast("1*2+(3+4)"));
         assert_eq!(Some((120, "hogehgoe")), get_number("120hogehgoe"));
         assert_eq!(Some((120, "")), get_number("120"));
         assert_eq!(Some((0, "")), get_number("0"));
