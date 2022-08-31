@@ -3,7 +3,7 @@ pub enum TokenKind<'a> {
     Reserved(&'a str),
     Num(i64),
     Ident(&'a str),
-    Return,
+    Keyword(&'a str),
 }
 
 #[derive(Debug)]
@@ -82,6 +82,19 @@ impl Tokenizer<'_> {
         0
     }
 
+    fn convert_keyword(&self, tokens: &mut Vec<Token>) {
+        let keywords: &'static [&'static str] = &["return", "if", "else", "for", "while"];
+        for mut token in tokens {
+            for kwd in keywords {
+                if let TokenKind::Ident(ident) = token.kind {
+                    if ident == *kwd {
+                        token.kind = TokenKind::Keyword(kwd);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
         while self.cur < self.code.len() - 1 {
@@ -104,16 +117,6 @@ impl Tokenizer<'_> {
                     self.cur += ps;
                 }
             }
-            // must come before ident
-            if self.code[self.cur..].starts_with("return")
-                && self.code[(self.cur + 6)..].starts_with(|ch| !is_alnum(ch))
-            {
-                tokens.push(Token {
-                    kind: TokenKind::Return,
-                    at: self.cur,
-                });
-                self.cur += 6;
-            }
             {
                 let is = self.get_ident_size();
                 if is != 0 {
@@ -125,6 +128,7 @@ impl Tokenizer<'_> {
                 }
             }
         }
+        self.convert_keyword(&mut tokens);
         tokens
     }
 }

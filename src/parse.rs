@@ -30,6 +30,18 @@ impl Parser<'_> {
         false
     }
 
+    fn equal(&mut self, op: &str) -> bool {
+        if self.cur == self.tok_len {
+            return false;
+        }
+        if let TokenKind::Reserved(str) = self.tokens[self.cur].kind {
+            if str == op {
+                return true;
+            }
+        }
+        false
+    }
+
     fn skip(&mut self, op: &str) {
         if !self.consume(op) {
             panic!("{} is expected", op)
@@ -63,12 +75,67 @@ impl Parser<'_> {
         }
     }
 
-    /// stmt    = expr ";" | "return" expr ";"
+    /// stmt    = expr ";"
+    ///         | "{" stmt* "}"
+    ///         | "if" "(" expr ")" stmt ("else" stmt)?
+    ///         | "while" "(" expr ")" stmt
+    ///         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+    ///         | "return" expr ";"
     fn stmt(&mut self) -> ast::Stmt {
         let node: ast::Stmt;
-        if let TokenKind::Return = self.tokens[self.cur].kind {
+        if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
             self.cur += 1;
-            node = ast::Stmt::Return(self.expr());
+            node = match kwd {
+                "if" => {
+                    self.skip("(");
+                    let expr = self.expr();
+                    self.skip(")");
+                    let stmt = Box::new(self.stmt());
+                    let stmt_else = if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
+                        if kwd == "else" {
+                            self.cur += 1;
+                            Some(Box::new(self.stmt()))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    ast::Stmt::If(expr, stmt, stmt_else)
+                }
+                "while" => {
+                    self.skip("(");
+                    let expr = self.expr();
+                    self.skip(")");
+                    let stmt = Box::new(self.stmt());
+                    ast::Stmt::While(expr, stmt)
+                }
+                "for" => {
+                    self.skip("(");
+                    let expr0 = if !self.consume(";") {
+                        Some(self.expr())
+                    } else {
+                        None
+                    };
+                    let expr1 = if !self.consume(";") {
+                        Some(self.expr())
+                    } else {
+                        None
+                    };
+                    let expr2 = if !self.equal(")") {
+                        Some(self.expr())
+                    } else {
+                        None
+                    };
+                    self.skip(")");
+                    ast::Stmt::For(expr0, expr1, expr2, Box::new(self.stmt()))
+                }
+                "return" => ast::Stmt::Return(self.expr()),
+                _ => unreachable!("{} is unexpected", kwd),
+            };
+        } else if self.consume("{") {
+            node = self.stmt();
+            self.skip("}");
         } else {
             node = ast::Stmt::Expr(self.expr());
         }
@@ -176,7 +243,9 @@ impl Parser<'_> {
         self.primary()
     }
 
-    /// primary    = num | ident | "(" expr ")"
+    /// primary = num
+    ///         | ident ("(" ")")?
+    ///         | "(" expr ")"
     fn primary(&mut self) -> ast::Expr {
         if self.consume("(") {
             let node = self.expr();

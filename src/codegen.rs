@@ -290,6 +290,9 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
 "#,
                 context.labels
             )
+        },
+        ast::Stmt::For(expr0, expr1, expr2, stmt) => {
+            unimplemented!()
         }
     }
 }

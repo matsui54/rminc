@@ -35,7 +35,8 @@ pub enum Stmt {
     Expr(Expr),                 /* f(x); */
     Compound(Vec<Decl>, Vec<Stmt>), /* { int x; return x + 1; } */
     If(Expr, Box<Stmt>, Option<Box<Stmt>>), /* if (expr) stmt [else stmt] */
-    While(Expr, Box<Stmt>)                  /* while (expr) stmt */
+    While(Expr, Box<Stmt>),                  /* while (expr) stmt */
+    For(Option<Expr>, Option<Expr>, Option<Expr>, Box<Stmt>) /* for ([expr0]; [expr1]; [expr2]) stmt */
 }
 
 #[derive(Debug)]
