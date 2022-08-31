@@ -83,7 +83,7 @@ impl Tokenizer<'_> {
     }
 
     fn convert_keyword(&self, tokens: &mut Vec<Token>) {
-        let keywords: &'static [&'static str] = &["return", "if", "else", "for", "while"];
+        let keywords: &'static [&'static str] = &["return", "if", "else", "for", "while", "long"];
         for mut token in tokens {
             for kwd in keywords {
                 if let TokenKind::Ident(ident) = token.kind {

@@ -76,7 +76,7 @@ impl Parser<'_> {
     }
 
     /// stmt    = expr ";"
-    ///         | "{" stmt* "}"
+    ///         | "{" compound_stmt*
     ///         | "if" "(" expr ")" stmt ("else" stmt)?
     ///         | "while" "(" expr ")" stmt
     ///         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
@@ -130,17 +130,54 @@ impl Parser<'_> {
                     self.skip(")");
                     ast::Stmt::For(expr0, expr1, expr2, Box::new(self.stmt()))
                 }
-                "return" => ast::Stmt::Return(self.expr()),
+                "return" => {
+                    let stmt = ast::Stmt::Return(self.expr());
+                    self.skip(";");
+                    stmt
+                }
                 _ => unreachable!("{} is unexpected", kwd),
             };
         } else if self.consume("{") {
-            node = self.stmt();
-            self.skip("}");
+            node = self.compound_stmt();
         } else {
             node = ast::Stmt::Expr(self.expr());
+            self.skip(";")
         }
-        self.skip(";");
         return node;
+    }
+
+    /// compound_stmt = {declaration}* {stmt}* "}"
+    fn compound_stmt(&mut self) -> ast::Stmt {
+        let mut decls: Vec<ast::Decl> = Vec::new();
+        while !self.equal("}") {
+            if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
+                if kwd == "long" {
+                    self.cur += 1;
+
+                    let name = if let TokenKind::Ident(ident) = self.tokens[self.cur].kind {
+                        self.cur += 1;
+                        self.skip(";");
+                        String::from(ident)
+                    } else {
+                        panic!("variable name is required");
+                    };
+                    decls.push(ast::Decl {
+                        var_type: ast::TypeExpr::Primitive(String::from("long")),
+                        name,
+                    })
+                } else {
+                    break;
+                };
+            } else {
+                break;
+            }
+        }
+        let mut stmts = Vec::new();
+        while self.cur < self.tok_len && !self.equal("}") {
+            stmts.push(self.stmt());
+        }
+        self.skip("}");
+        ast::Stmt::Compound(decls, stmts)
     }
 
     /// expr       = assign
