@@ -290,9 +290,27 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
 "#,
                 context.labels
             )
-        },
-        ast::Stmt::For(expr0, expr1, expr2, stmt) => {
-            unimplemented!()
+        }
+        ast::Stmt::For(expr_init, expr_cond, expr_inc, stmt) => {
+            context.labels += 1;
+            let label = context.labels;
+            let mut init_asm = if let Some(asm) = expr_init {
+                expr_to_asm(&asm, context.env, context.v)
+            } else {
+                String::new()
+            };
+            init_asm += format!(".Lstart{label}:\n").as_str();
+            if let Some(asm) = expr_cond {
+                init_asm = init_asm
+                    + expr_to_asm(&asm, context.env, context.v).as_str()
+                    + "  cmpq $0, %rax\n"
+                    + format!("  je .Lend{label}\n").as_str();
+            }
+            init_asm += stmt_to_asm(*stmt, context).as_str();
+            if let Some(asm) = expr_inc {
+                init_asm += expr_to_asm(&asm, context.env, context.v).as_str();
+            }
+            init_asm+format!("  jmp .Lstart{label}\n").as_str() + format!(".Lend{label}:\n").as_str()
         }
     }
 }
@@ -363,4 +381,3 @@ pub fn ast_to_asm_program(_program: ast::Program) -> String {
         .collect::<Vec<_>>()
         .join("")
 }
-

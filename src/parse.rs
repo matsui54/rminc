@@ -75,12 +75,12 @@ impl Parser<'_> {
         }
     }
 
-    /// stmt    = expr ";"
-    ///         | "{" compound_stmt*
+    /// stmt    = "{" compound_stmt
     ///         | "if" "(" expr ")" stmt ("else" stmt)?
     ///         | "while" "(" expr ")" stmt
     ///         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
     ///         | "return" expr ";"
+    ///         | expr-stmt
     fn stmt(&mut self) -> ast::Stmt {
         let node: ast::Stmt;
         if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
@@ -112,16 +112,18 @@ impl Parser<'_> {
                 }
                 "for" => {
                     self.skip("(");
-                    let expr0 = if !self.consume(";") {
+                    let expr0 = if !self.equal(";") {
                         Some(self.expr())
                     } else {
                         None
                     };
-                    let expr1 = if !self.consume(";") {
+                    self.skip(";");
+                    let expr1 = if !self.equal(";") {
                         Some(self.expr())
                     } else {
                         None
                     };
+                    self.skip(";");
                     let expr2 = if !self.equal(")") {
                         Some(self.expr())
                     } else {
@@ -140,10 +142,18 @@ impl Parser<'_> {
         } else if self.consume("{") {
             node = self.compound_stmt();
         } else {
-            node = ast::Stmt::Expr(self.expr());
-            self.skip(";")
+            node = self.expr_stmt();
         }
         return node;
+    }
+
+    /// expr-stmt = expr? ";"
+    fn expr_stmt(&mut self) -> ast::Stmt {
+        if self.consume(";") {
+            ast::Stmt::Empty
+        } else {
+            ast::Stmt::Expr(self.expr())
+        }
     }
 
     /// compound_stmt = {declaration}* {stmt}* "}"
@@ -310,16 +320,5 @@ mod tests {
 
     #[test]
     fn it_works() {
-        println!("{:?}", tokenize("1+1"));
-        println!("{:?}", tokenize("  1 +       1+213213- 22 "));
-        println!("{:?}", str_to_ast("  1 +       1+213213- 22 "));
-        println!("{:?}", str_to_ast("1*2+(3+4)"));
-        println!("{:?}", str_to_ast("-3*+5+30"));
-        assert_eq!(Some((120, "hogehgoe")), get_number("120hogehgoe"));
-        assert_eq!(Some((120, "")), get_number("120"));
-        assert_eq!(Some((0, "")), get_number("0"));
-        assert_eq!(None, get_number("a0"));
-        assert_eq!(None, get_number("a"));
-        assert_eq!(None, get_number(""));
     }
 }

@@ -24,6 +24,7 @@ fn main() {
     println!("{:?}", tokens);
 
     let ast = Parser::new(tokens).parse();
+    println!("{:?}", ast);
 
     let asm = codegen::ast_to_asm_program(ast);
 
