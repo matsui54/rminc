@@ -1,26 +1,24 @@
 use crate::ast;
 use crate::tokenize::{Token, TokenKind};
+use crate::util;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
     cur: usize,
-    tok_len: usize,
+    code: &'a str,
 }
 
 impl Parser<'_> {
-    pub fn new(tokens: Vec<Token>) -> Parser {
+    pub fn new<'a>(tokens: Vec<Token<'a>>, code: &'a str) -> Parser<'a> {
         Parser {
-            tok_len: tokens.len(),
             tokens,
             cur: 0,
+            code,
         }
     }
 
     fn consume(&mut self, op: &str) -> bool {
-        if self.cur == self.tok_len {
-            return false;
-        }
         if let TokenKind::Reserved(str) = self.tokens[self.cur].kind {
             if str == op {
                 self.cur += 1;
@@ -31,9 +29,6 @@ impl Parser<'_> {
     }
 
     fn equal(&mut self, op: &str) -> bool {
-        if self.cur == self.tok_len {
-            return false;
-        }
         if let TokenKind::Reserved(str) = self.tokens[self.cur].kind {
             if str == op {
                 return true;
@@ -44,26 +39,36 @@ impl Parser<'_> {
 
     fn skip(&mut self, op: &str) {
         if !self.consume(op) {
-            panic!("{} is expected", op)
+            util::error_tok(
+                self.code,
+                &self.tokens[self.cur],
+                format!("{} is expected", op).as_str(),
+            );
         }
     }
 
     fn expect_number(&mut self) -> ast::Expr {
-        if self.cur == self.tok_len {
-            panic!("number is expected");
-        }
         if let TokenKind::Num(num) = self.tokens[self.cur].kind {
             self.cur += 1;
             return ast::Expr::IntLiteral(num);
+        } else {
+            util::error_tok(
+                self.code,
+                &self.tokens[self.cur],
+                format!("number is expected").as_str(),
+            )
         }
-        panic!("number is expected");
     }
 
     /// program    = stmt*
     fn program(&mut self) -> ast::Program {
         let mut stmts = Vec::new();
-        while self.cur < self.tok_len {
-            stmts.push(self.stmt());
+        loop {
+            if let TokenKind::EOF = self.tokens[self.cur].kind {
+                break;
+            } else {
+                stmts.push(self.stmt());
+            }
         }
         ast::Program {
             defs: Vec::from([ast::Def::Fun(
@@ -152,7 +157,9 @@ impl Parser<'_> {
         if self.consume(";") {
             ast::Stmt::Empty
         } else {
-            ast::Stmt::Expr(self.expr())
+            let node = ast::Stmt::Expr(self.expr());
+            self.skip(";");
+            node
         }
     }
 
@@ -169,7 +176,11 @@ impl Parser<'_> {
                         self.skip(";");
                         String::from(ident)
                     } else {
-                        panic!("variable name is required");
+                        util::error_tok(
+                            self.code,
+                            &self.tokens[self.cur],
+                            "variable name is required",
+                        )
                     };
                     decls.push(ast::Decl {
                         var_type: ast::TypeExpr::Primitive(String::from("long")),
@@ -183,10 +194,9 @@ impl Parser<'_> {
             }
         }
         let mut stmts = Vec::new();
-        while self.cur < self.tok_len && !self.equal("}") {
+        while !self.consume("}") {
             stmts.push(self.stmt());
         }
-        self.skip("}");
         ast::Stmt::Compound(decls, stmts)
     }
 
@@ -319,6 +329,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-    }
+    fn it_works() {}
 }

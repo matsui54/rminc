@@ -1,17 +1,21 @@
+use crate::util;
+
 #[derive(Debug)]
 pub enum TokenKind<'a> {
     Reserved(&'a str),
     Num(i64),
     Ident(&'a str),
     Keyword(&'a str),
+    EOF,
 }
 
 #[derive(Debug)]
 pub struct Token<'a> {
     pub kind: TokenKind<'a>,
-    at: usize,
+    pub at: usize,
 }
 
+#[derive(Debug)]
 pub struct Tokenizer<'a> {
     code: &'a str,
     cur: usize,
@@ -115,6 +119,7 @@ impl Tokenizer<'_> {
                         at: self.cur,
                     });
                     self.cur += ps;
+                    continue;
                 }
             }
             {
@@ -125,10 +130,16 @@ impl Tokenizer<'_> {
                         at: self.cur,
                     });
                     self.cur += is;
+                    continue;
                 }
             }
+            util::error_at(self.code, self.cur, "invalid token")
         }
         self.convert_keyword(&mut tokens);
+        tokens.push(Token {
+            kind: TokenKind::EOF,
+            at: self.code.len(),
+        });
         tokens
     }
 }

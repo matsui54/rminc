@@ -8,6 +8,7 @@ mod ast;
 mod codegen;
 mod parse;
 mod tokenize;
+mod util;
 
 /// # reference
 /// https://www.sigbus.info/compilerbook
@@ -23,7 +24,7 @@ fn main() {
     let tokens = tokenizer.tokenize();
     println!("{:?}", tokens);
 
-    let ast = Parser::new(tokens).parse();
+    let ast = Parser::new(tokens, &code).parse();
     println!("{:?}", ast);
 
     let asm = codegen::ast_to_asm_program(ast);
