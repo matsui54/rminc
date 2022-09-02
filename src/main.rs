@@ -51,7 +51,8 @@ mod tests {
         let asm = gen_asm(code);
         let mut file = File::create(&asm_fname).unwrap();
         file.write_all(asm.as_bytes()).unwrap();
-        {
+
+        let result = std::panic::catch_unwind(|| {
             let output = Command::new("gcc")
                 .arg("-static")
                 .arg("-o")
@@ -61,14 +62,18 @@ mod tests {
                 .output()
                 .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
             assert!(output.status.success());
-        }
+        });
+        std::fs::remove_file(asm_fname).unwrap();
+        assert!(result.is_ok());
 
-        {
-            let output = Command::new(exe_fname)
+        let result = std::panic::catch_unwind(|| {
+            let output = Command::new(&exe_fname)
                 .output()
                 .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
             assert_eq!(output.status.code().unwrap(), ref_v);
-        }
+        });
+        std::fs::remove_file(exe_fname).unwrap();
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -84,6 +89,7 @@ mod tests {
         check_output("{return - -10;}\n", 10);
         check_output("{return - - +10;}\n", 10);
     }
+
     #[test]
     fn cmp() {
         check_output("{return 0==1;}\n", 0);
@@ -130,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if() {
+    fn if_stmt() {
         check_output("{ if (0) return 2; return 3; }\n", 3);
         check_output("{ if (1-1) return 2; return 3; }\n", 3);
         check_output("{ if (1) return 2; return 3; }\n", 2);
@@ -140,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn test_while_for() {
+    fn while_for() {
         check_output(
             "{ long i; long j;i=0;j=0; for (i=0; i<=10; i=i+1) j=i+j; return j; }\n",
             55,
