@@ -323,11 +323,3 @@ impl Parser<'_> {
         self.program()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {}
-}
