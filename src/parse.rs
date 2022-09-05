@@ -48,9 +48,13 @@ impl Parser<'_> {
     }
 
     fn expect_number(&mut self) -> ast::Expr {
+        let current = self.tokens[self.cur].at;
         if let TokenKind::Num(num) = self.tokens[self.cur].kind {
             self.cur += 1;
-            return ast::Expr::IntLiteral(num);
+            ast::Expr {
+                kind: ast::ExprKind::IntLiteral(num),
+                at: current,
+            }
         } else {
             util::error_tok(
                 self.code,
@@ -75,7 +79,10 @@ impl Parser<'_> {
                 String::from("main"),
                 Vec::new(),
                 ast::TypeExpr::Primitive(String::from("long")),
-                ast::Stmt::Compound(Vec::new(), stmts),
+                ast::Stmt {
+                    kind: ast::StmtKind::Compound(Vec::new(), stmts),
+                    at: 0,
+                },
             )]),
         }
     }
@@ -88,6 +95,7 @@ impl Parser<'_> {
     ///         | expr-stmt
     fn stmt(&mut self) -> ast::Stmt {
         let node: ast::Stmt;
+        let current = self.tokens[self.cur].at;
         if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
             self.cur += 1;
             node = match kwd {
@@ -106,14 +114,20 @@ impl Parser<'_> {
                     } else {
                         None
                     };
-                    ast::Stmt::If(expr, stmt, stmt_else)
+                    ast::Stmt {
+                        kind: ast::StmtKind::If(expr, stmt, stmt_else),
+                        at: current,
+                    }
                 }
                 "while" => {
                     self.skip("(");
                     let expr = self.expr();
                     self.skip(")");
                     let stmt = Box::new(self.stmt());
-                    ast::Stmt::While(expr, stmt)
+                    ast::Stmt {
+                        kind: ast::StmtKind::While(expr, stmt),
+                        at: current,
+                    }
                 }
                 "for" => {
                     self.skip("(");
@@ -135,12 +149,18 @@ impl Parser<'_> {
                         None
                     };
                     self.skip(")");
-                    ast::Stmt::For(expr0, expr1, expr2, Box::new(self.stmt()))
+                    ast::Stmt {
+                        kind: ast::StmtKind::For(expr0, expr1, expr2, Box::new(self.stmt())),
+                        at: current,
+                    }
                 }
                 "return" => {
-                    let stmt = ast::Stmt::Return(self.expr());
+                    let stmt = ast::StmtKind::Return(self.expr());
                     self.skip(";");
-                    stmt
+                    ast::Stmt {
+                        kind: stmt,
+                        at: current,
+                    }
                 }
                 _ => unreachable!("{} is unexpected", kwd),
             };
@@ -155,9 +175,15 @@ impl Parser<'_> {
     /// expr-stmt = expr? ";"
     fn expr_stmt(&mut self) -> ast::Stmt {
         if self.consume(";") {
-            ast::Stmt::Empty
+            ast::Stmt {
+                kind: ast::StmtKind::Empty,
+                at: 0,
+            }
         } else {
-            let node = ast::Stmt::Expr(self.expr());
+            let node = ast::Stmt {
+                kind: ast::StmtKind::Expr(self.expr()),
+                at: self.tokens[self.cur].at,
+            };
             self.skip(";");
             node
         }
@@ -166,6 +192,7 @@ impl Parser<'_> {
     /// compound_stmt = {declaration}* {stmt}* "}"
     fn compound_stmt(&mut self) -> ast::Stmt {
         let mut decls: Vec<ast::Decl> = Vec::new();
+        let current = self.tokens[self.cur].at;
         while !self.equal("}") {
             if let TokenKind::Keyword(kwd) = self.tokens[self.cur].kind {
                 if kwd == "long" {
@@ -197,7 +224,10 @@ impl Parser<'_> {
         while !self.consume("}") {
             stmts.push(self.stmt());
         }
-        ast::Stmt::Compound(decls, stmts)
+        ast::Stmt {
+            kind: ast::StmtKind::Compound(decls, stmts),
+            at: current,
+        }
     }
 
     /// expr       = assign
@@ -209,7 +239,10 @@ impl Parser<'_> {
     fn assign(&mut self) -> ast::Expr {
         let mut node = self.equality();
         if self.consume("=") {
-            node = ast::Expr::Op(String::from("="), Vec::from([node, self.assign()]));
+            node = ast::Expr {
+                kind: ast::ExprKind::Op(String::from("="), Vec::from([node, self.assign()])),
+                at: self.tokens[self.cur - 1].at,
+            };
         }
         node
     }
@@ -219,11 +252,23 @@ impl Parser<'_> {
         let mut node = self.relational();
         loop {
             if self.consume("==") {
-                node = ast::Expr::Op(String::from("=="), Vec::from([node, self.relational()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(
+                        String::from("=="),
+                        Vec::from([node, self.relational()]),
+                    ),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             if self.consume("!=") {
-                node = ast::Expr::Op(String::from("!="), Vec::from([node, self.relational()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(
+                        String::from("!="),
+                        Vec::from([node, self.relational()]),
+                    ),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             return node;
@@ -233,22 +278,15 @@ impl Parser<'_> {
     /// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
     fn relational(&mut self) -> ast::Expr {
         let mut node = self.add();
-        loop {
-            if self.consume("<") {
-                node = ast::Expr::Op(String::from("<"), Vec::from([node, self.add()]));
-                continue;
-            }
-            if self.consume("<=") {
-                node = ast::Expr::Op(String::from("<="), Vec::from([node, self.add()]));
-                continue;
-            }
-            if self.consume(">") {
-                node = ast::Expr::Op(String::from(">"), Vec::from([node, self.add()]));
-                continue;
-            }
-            if self.consume(">=") {
-                node = ast::Expr::Op(String::from(">="), Vec::from([node, self.add()]));
-                continue;
+        'outer: loop {
+            for pat in ["<", "<=", ">", ">="] {
+                if self.consume(pat) {
+                    node = ast::Expr {
+                        kind: ast::ExprKind::Op(String::from(pat), Vec::from([node, self.add()])),
+                        at: self.tokens[self.cur - 1].at,
+                    };
+                    continue 'outer;
+                }
             }
             return node;
         }
@@ -259,11 +297,17 @@ impl Parser<'_> {
         let mut node = self.mul();
         loop {
             if self.consume("+") {
-                node = ast::Expr::Op(String::from("+"), Vec::from([node, self.mul()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(String::from("+"), Vec::from([node, self.mul()])),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             if self.consume("-") {
-                node = ast::Expr::Op(String::from("-"), Vec::from([node, self.mul()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(String::from("-"), Vec::from([node, self.mul()])),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             return node;
@@ -275,11 +319,17 @@ impl Parser<'_> {
         let mut node = self.unary();
         loop {
             if self.consume("*") {
-                node = ast::Expr::Op(String::from("*"), Vec::from([node, self.unary()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(String::from("*"), Vec::from([node, self.unary()])),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             if self.consume("/") {
-                node = ast::Expr::Op(String::from("/"), Vec::from([node, self.unary()]));
+                node = ast::Expr {
+                    kind: ast::ExprKind::Op(String::from("/"), Vec::from([node, self.unary()])),
+                    at: self.tokens[self.cur - 1].at,
+                };
                 continue;
             }
             return node;
@@ -292,10 +342,19 @@ impl Parser<'_> {
             return self.unary();
         }
         if self.consume("-") {
-            return ast::Expr::Op(
-                String::from("-"),
-                Vec::from([ast::Expr::IntLiteral(0), self.unary()]),
-            );
+            return ast::Expr {
+                kind: ast::ExprKind::Op(
+                    String::from("-"),
+                    Vec::from([
+                        ast::Expr {
+                            kind: ast::ExprKind::IntLiteral(0),
+                            at: self.tokens[self.cur - 1].at,
+                        },
+                        self.unary(),
+                    ]),
+                ),
+                at: self.tokens[self.cur - 1].at,
+            };
         }
         self.primary()
     }
@@ -311,7 +370,10 @@ impl Parser<'_> {
         }
 
         if let TokenKind::Ident(ident) = self.tokens[self.cur].kind {
-            let node = ast::Expr::Id(String::from(ident));
+            let node = ast::Expr {
+                kind: ast::ExprKind::Id(String::from(ident)),
+                at: self.tokens[self.cur].at,
+            };
             self.cur += 1;
             return node;
         }

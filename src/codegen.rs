@@ -1,4 +1,5 @@
 use crate::ast;
+use crate::util;
 use std::collections::HashMap;
 
 /// 「環境」を表す型
@@ -136,8 +137,8 @@ fn op_to_asm(op: String, exprs: &Vec<ast::Expr>, env: &Env, v: u32) -> String {
                 panic!("invalid num of operator +")
             }
             let (lhs, rhs) = (&exprs[0], &exprs[1]);
-            let operand = match lhs {
-                ast::Expr::Id(expr) => match env.get(expr) {
+            let operand = match &lhs.kind {
+                ast::ExprKind::Id(expr) => match env.get(expr) {
                     Some(expr) => *expr,
                     None => panic!("undefined variable {expr}"),
                 },
@@ -162,19 +163,19 @@ fn op_to_asm(op: String, exprs: &Vec<ast::Expr>, env: &Env, v: u32) -> String {
 /// Expr構造体からアセンブリを出力する関数。
 /// exprを評価し、その結果を%raxレジスタに代入するようなアセンブリを生成する。
 fn expr_to_asm(expr: &ast::Expr, env: &Env, v: u32) -> String {
-    match expr {
-        ast::Expr::IntLiteral(num) => format!("  movq ${num}, %rax\n"),
-        ast::Expr::Id(id) => {
+    match &expr.kind {
+        ast::ExprKind::IntLiteral(num) => format!("  movq ${num}, %rax\n"),
+        ast::ExprKind::Id(id) => {
             let addr = match env.get(id) {
                 Some(expr) => *expr,
                 None => panic!("undefined variable {id}"),
             };
             format!("  movq -{addr}(%rbp), %rax\n")
         }
-        ast::Expr::Op(op, exprs) => op_to_asm(op.to_string(), exprs, env, v),
-        ast::Expr::Call(expr, exprs) => {
-            let fn_name = match &*(*expr) {
-                ast::Expr::Id(label) => label,
+        ast::ExprKind::Op(op, exprs) => op_to_asm(op.to_string(), &exprs, env, v),
+        ast::ExprKind::Call(expr, exprs) => {
+            let fn_name = match &(*expr).kind {
+                ast::ExprKind::Id(label) => label,
                 _ => {
                     panic!("{:?} is not id", expr)
                 }
@@ -203,28 +204,28 @@ fn expr_to_asm(expr: &ast::Expr, env: &Env, v: u32) -> String {
             asm += format!("  addq ${rsp_offset}, %rsp\n").as_str();
             asm
         }
-        ast::Expr::Paren(expr) => expr_to_asm(&(*expr), env, v),
+        ast::ExprKind::Paren(expr) => expr_to_asm(&(*expr), env, v),
     }
 }
 
 /// statementをアセンブリに変換する
 fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
-    match stmt {
-        ast::Stmt::Empty => String::from(""),
-        ast::Stmt::Continue => String::from(""),
-        ast::Stmt::Break => String::from(""),
+    match stmt.kind {
+        ast::StmtKind::Empty => String::from(""),
+        ast::StmtKind::Continue => String::from(""),
+        ast::StmtKind::Break => String::from(""),
         // expr_to_asmは%raxに結果を書くのでそのままretqする。
         // %rbpも戻す
-        ast::Stmt::Return(expr) => format!(
+        ast::StmtKind::Return(expr) => format!(
             "{}  popq %rbp\n  retq\n",
             expr_to_asm(&expr, &context.env, context.v)
         ),
-        ast::Stmt::Expr(expr) => expr_to_asm(&expr, &context.env, context.v),
+        ast::StmtKind::Expr(expr) => expr_to_asm(&expr, &context.env, context.v),
         // 波括弧で囲まれた部分
         // この中で宣言された変数はこの中でしか使えないが、
         // スコープ外で定義された変数にはアクセスできる。
         // envをコピーすることによって、スコープの概念を実現する。
-        ast::Stmt::Compound(decls, stmts) => {
+        ast::StmtKind::Compound(decls, stmts) => {
             let mut env = context.env.clone();
             for decl in decls {
                 env.insert(decl.name, context.v);
@@ -247,7 +248,7 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
         }
         // if文
         // 条件を評価し、結果が0ならelse節か最後までジャンプ
-        ast::Stmt::If(expr, stmt, stmt_else) => {
+        ast::StmtKind::If(expr, stmt, stmt_else) => {
             let cond_asm = expr_to_asm(&expr, context.env, context.v);
             let body = stmt_to_asm(*stmt, context);
             context.labels += 1;
@@ -276,7 +277,7 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
         // 波括弧の中の処理→条件の評価
         // という順序で書き、まずは条件の評価にジャンプする
         // 続ける条件が満たされていれば、上に戻って処理を継続する。
-        ast::Stmt::While(expr, stmt) => {
+        ast::StmtKind::While(expr, stmt) => {
             let cond_asm = expr_to_asm(&expr, context.env, context.v);
             let body_asm = stmt_to_asm(*stmt, context);
             context.labels += 1;
@@ -291,7 +292,7 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
                 context.labels
             )
         }
-        ast::Stmt::For(expr_init, expr_cond, expr_inc, stmt) => {
+        ast::StmtKind::For(expr_init, expr_cond, expr_inc, stmt) => {
             context.labels += 1;
             let label = context.labels;
             let mut init_asm = if let Some(asm) = expr_init {
@@ -310,7 +311,9 @@ fn stmt_to_asm(stmt: ast::Stmt, context: &mut Context) -> String {
             if let Some(asm) = expr_inc {
                 init_asm += expr_to_asm(&asm, context.env, context.v).as_str();
             }
-            init_asm+format!("  jmp .Lstart{label}\n").as_str() + format!(".Lend{label}:\n").as_str()
+            init_asm
+                + format!("  jmp .Lstart{label}\n").as_str()
+                + format!(".Lend{label}:\n").as_str()
         }
     }
 }
