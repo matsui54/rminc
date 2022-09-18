@@ -3,6 +3,7 @@ use std::io::Write;
 
 use parse::Parser;
 use tokenize::Tokenizer;
+use codegen::Codegen;
 
 mod ast;
 mod codegen;
@@ -18,7 +19,8 @@ fn gen_asm(code: &str) -> String {
     let ast = Parser::new(tokens, code).parse();
     println!("{:?}", ast);
 
-    codegen::ast_to_asm_program(ast)
+    let cogen = Codegen::new(code);
+    cogen.ast_to_asm_program(ast)
 }
 
 /// # reference
